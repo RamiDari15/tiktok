@@ -84,7 +84,7 @@ INITIAL_NAMES  = load_usernames_from_csv("server/scrapers/users4.csv")
 
 
 
-TARGET_COUNT = 5
+TARGET_COUNT = 100
 
 api = TikAPI(TIKAPI_KEY)
 User = api.user(accountKey=ACCOUNT_KEY)
