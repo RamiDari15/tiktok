@@ -216,7 +216,7 @@ Scraper idle
 </div>
 
 <script>
-
+const API_BASE = "https://tiktok-my7m.onrender.com";
 const SITE_PASSWORD = "wxaf121";
 
 // check if already unlocked
@@ -293,7 +293,7 @@ return found ? found.name : code
 }
 
 function downloadCSV(){
-    window.location.href = "http://127.0.0.1:5050/download";
+    window.location.href = `${API_BASE}/download`;
 }
 
 // RENDER REGION BUTTONS
@@ -433,6 +433,26 @@ currentSort = field
 applyFilters()
 }
 
+async function waitForCompletion(){
+
+    const interval = setInterval(async () => {
+
+        const res = await fetch(`${API_BASE}/status`);
+        const data = await res.json();
+
+        console.log("Status:", data);
+
+        if(data.finished){
+            clearInterval(interval);
+
+            console.log("✅ Done — downloading CSV");
+
+            window.location.href = `${API_BASE}/download`;
+        }
+
+    }, 2000);
+}
+
 // EXPORT CSV
 function exportCSV(){
 
@@ -465,7 +485,7 @@ status.classList.add("running")
 
 try{
 
-const res = await fetch("http://127.0.0.1:5050/collect",{
+const res = await fetch(`${API_BASE}/collect`,{
 method:"POST",
 headers:{ "Content-Type":"application/json" },
 body:JSON.stringify({ script })
@@ -476,10 +496,8 @@ console.log("Response:", data)
 
 status.innerHTML = "✅ Scraping started"
 
-// give scraper time
-setTimeout(()=>{
-fetchUsers()
-},10000)
+// wait until actually finished
+waitForCompletion()
 
 }catch(e){
 
