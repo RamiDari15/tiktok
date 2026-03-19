@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>TikTok Creator Discovery Dashboard</title>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+<style>
+
+body{
+font-family:Arial;
+background:#0f172a;
+color:#e2e8f0;
+margin:0;
+}
+
+header{
+background:#020617;
+padding:20px;
+font-size:22px;
+font-weight:bold;
+}
+
+.container{
+padding:30px;
+}
+
+.controls{
+background:#1e293b;
+padding:20px;
+border-radius:10px;
+margin-bottom:20px;
+}
+
+input,select{
+padding:8px;
+margin-right:10px;
+border-radius:6px;
+border:none;
+}
+
+button{
+padding:8px 16px;
+background:#3b82f6;
+border:none;
+color:white;
+border-radius:6px;
+cursor:pointer;
+}
+
+button:hover{
+background:#2563eb;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+background:#1e293b;
+}
+
+th,td{
+padding:10px;
+border-bottom:1px solid #334155;
+text-align:left;
+}
+
+th{
+background:#020617;
+cursor:pointer;
+}
+
+.avatar{
+width:35px;
+height:35px;
+border-radius:50%;
+margin-right:8px;
+object-fit:cover;
+}
+
+.username{
+display:flex;
+align-items:center;
+}
+
+.scraperControls{
+margin-top:15px;
+padding-top:10px;
+border-top:1px solid #334155;
+}
+
+.status{
+margin-top:10px;
+font-size:14px;
+color:#94a3b8;
+}
+
+.running{
+color:#22c55e;
+}
+
+/* MULTI REGION */
+.regionMulti{
+display:flex;
+flex-wrap:wrap;
+gap:8px;
+margin-top:10px;
+}
+
+.regionBtn{
+padding:6px 10px;
+border-radius:20px;
+background:#334155;
+cursor:pointer;
+font-size:13px;
+}
+
+.regionBtn.active{
+background:#3b82f6;
+color:white;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>
+TikTok Creator Discovery Dashboard
+</header>
+
+<div class="container">
+
+<div class="controls">
+
+<input id="search" placeholder="Search username">
+
+<!-- MULTI REGION -->
+<div id="regionFilter" class="regionMulti"></div>
+
+<br><br>
+
+<input id="minFollowers" type="number" placeholder="Min followers">
+<input id="maxFollowers" type="number" placeholder="Max followers">
+
+<select id="sortBy">
+<option value="">Sort By</option>
+<option value="followers">Followers</option>
+<option value="videos">Videos</option>
+</select>
+
+<button onclick="exportCSV()">Export CSV</button>
+
+<div class="scraperControls">
+
+<select id="collectorType">
+<option value="arab">Middle eastern Scraper</option>
+<option value="us">US / Canada Scraper</option>
+<option value="global">UK Scraper</option>
+</select>
+
+<button id="scrapeBtn" onclick="collectUsers()">Grab More Users</button>
+<button id="downloadBtn" onclick="downloadCSV()">Download CSV</button>
+
+<div id="scraperStatus" class="status">
+Scraper idle
+</div>
+
+</div>
+
+</div>
+
+<table>
+<thead>
+<tr>
+<th>User</th>
+<th>Region</th>
+<th onclick="setSort('followers')">Followers ⬍</th>
+<th onclick="setSort('videos')">Videos ⬍</th>
+</tr>
+</thead>
+
+<tbody id="usersTable"></tbody>
+
+</table>
+
+<div style="margin-top:20px; display:flex; justify-content:center; gap:15px;">
+    <button onclick="fetchUsers('prev')">⬅ Previous</button>
+    <button onclick="fetchUsers('next')">Next ➡</button>
+</div>
+</div>
+
+<script>
+
+// FIREBASE CONFIG
+const firebaseConfig = {
+apiKey: "AIzaSyCPRwWknCwEFNE2zObsCRZuhAxR-oHmw8Y",
+authDomain: "recuits.firebaseapp.com",
+projectId: "recuits",
+storageBucket: "recuits.firebasestorage.app",
+messagingSenderId: "169139893148",
+appId: "1:169139893148:web:a53e20c9dd7f30ed3ece59",
+measurementId: "G-GQ8PJ64WS1"
+}
+
+let lastDoc = null
+let firstDoc = null
+let pageStack = []   // for going back
+
+firebase.initializeApp(firebaseConfig)
+const db = firebase.firestore()
+
+let allUsers = []
+let filteredUsers = []
+let currentSort = ""
+let selectedRegions = []
+
+// FULL COUNTRY NAMES
+const REGIONS = [
+{code:"US", name:"United States"},
+{code:"CA", name:"Canada"},
+{code:"GB", name:"United Kingdom"},
+{code:"SA", name:"Saudi Arabia"},
+{code:"AE", name:"United Arab Emirates"},
+{code:"QA", name:"Qatar"},
+{code:"KW", name:"Kuwait"},
+{code:"OM", name:"Oman"},
+{code:"BH", name:"Bahrain"},
+{code:"IR", name:"Iran"},
+{code:"IQ", name:"Iraq"},
+{code:"JO", name:"Jordan"},
+{code:"LB", name:"Lebanon"},
+{code:"SY", name:"Syria"},
+{code:"IL", name:"Israel"},
+{code:"PS", name:"Palestine"},
+{code:"YE", name:"Yemen"},
+{code:"TR", name:"Turkey"}
+]
+
+// HELPER: CODE -> NAME
+function getCountryName(code){
+const found = REGIONS.find(r=>r.code===code)
+return found ? found.name : code
+}
+
+function downloadCSV(){
+    window.location.href = "http://127.0.0.1:5050/download";
+}
+
+// RENDER REGION BUTTONS
+function renderRegionButtons(){
+
+const container = document.getElementById("regionFilter")
+container.innerHTML = ""
+
+REGIONS.forEach(r=>{
+
+const btn = document.createElement("div")
+btn.className = "regionBtn"
+btn.innerText = r.name
+
+btn.onclick = ()=>{
+
+if(selectedRegions.includes(r.code)){
+selectedRegions = selectedRegions.filter(x=>x!==r.code)
+btn.classList.remove("active")
+}else{
+selectedRegions.push(r.code)
+btn.classList.add("active")
+}
+
+applyFilters()
+}
+
+container.appendChild(btn)
+
+})
+}
+
+// 🔥 HELPER (add once at top if not already)
+function parseNumber(val){
+if(!val) return 0
+return parseInt(val.toString().replace(/,/g, "")) || 0
+}
+
+
+// 🔥 FETCH USERS (LIMIT 400 + FIX DATA)
+async function fetchUsers(direction = "next"){
+
+let query = db.collection("users").limit(100)
+
+if(direction === "next" && lastDoc){
+    query = query.startAfter(lastDoc)
+}
+
+if(direction === "prev" && pageStack.length > 0){
+    lastDoc = pageStack.pop()
+    query = db.collection("users").startAt(lastDoc).limit(100)
+}
+
+const snapshot = await query.get()
+
+if(snapshot.empty){
+    console.log("No more users")
+    return
+}
+
+allUsers = []
+
+firstDoc = snapshot.docs[0]
+lastDoc = snapshot.docs[snapshot.docs.length - 1]
+
+// store history for back button
+if(direction === "next"){
+    pageStack.push(firstDoc)
+}
+
+snapshot.forEach(doc=>{
+const u = doc.data()
+
+if(u.username){
+allUsers.push({
+...u,
+followers: parseNumber(u.stats?.followers),
+videos: parseNumber(u.stats?.videos)
+})
+}
+})
+
+applyFilters()
+}
+
+// 🔥 APPLY FILTERS (FIXED)
+function applyFilters(){
+
+const search = document.getElementById("search").value.toLowerCase()
+const min = parseInt(document.getElementById("minFollowers").value) || 0
+const max = parseInt(document.getElementById("maxFollowers").value) || Infinity
+
+filteredUsers = allUsers.filter(u=>{
+
+if(search && !u.username?.toLowerCase().includes(search)) return false
+
+if(selectedRegions.length > 0 && !selectedRegions.includes(u.region)) return false
+
+if(u.followers < min) return false
+if(u.followers > max) return false
+
+return true
+})
+
+// SORT
+if(currentSort){
+filteredUsers.sort((a,b)=>b[currentSort] - a[currentSort])
+}
+
+renderTable()
+}
+
+// RENDER TABLE
+function renderTable(){
+
+const table = document.getElementById("usersTable")
+table.innerHTML = ""
+
+filteredUsers.forEach(u=>{
+table.innerHTML += `
+<tr>
+<td class="username">
+<img class="avatar" src="${u.avatar || 'https://i.imgur.com/0y0y0y0.png'}">
+@${u.username}
+</td>
+<td>${getCountryName(u.region)}</td>
+<td>${u.followers || 0}</td>
+<td>${u.videos || 0}</td>
+</tr>
+`
+})
+}
+
+// SORT
+function setSort(field){
+currentSort = field
+applyFilters()
+}
+
+// EXPORT CSV
+function exportCSV(){
+
+let csv = "username,region,followers,videos\n"
+
+filteredUsers.forEach(u=>{
+csv += `${u.username},${getCountryName(u.region)},${u.followers || 0},${u.videos || 0}\n`
+})
+
+const blob = new Blob([csv],{type:"text/csv"})
+const url = URL.createObjectURL(blob)
+
+const a = document.createElement("a")
+a.href = url
+a.download = "filtered_creators.csv"
+a.click()
+}
+
+// SCRAPER
+async function collectUsers(){
+
+const btn = document.getElementById("scrapeBtn")
+const status = document.getElementById("scraperStatus")
+const script = document.getElementById("collectorType").value
+
+btn.disabled = true
+btn.innerText = "Running..."
+status.innerHTML = "🟢 Running..."
+status.classList.add("running")
+
+try{
+
+const res = await fetch("http://127.0.0.1:5050/collect",{
+method:"POST",
+headers:{ "Content-Type":"application/json" },
+body:JSON.stringify({ script })
+})
+
+const data = await res.json()
+console.log("Response:", data)
+
+status.innerHTML = "✅ Scraping started"
+
+// give scraper time
+setTimeout(()=>{
+fetchUsers()
+},10000)
+
+}catch(e){
+
+console.error(e)
+status.innerHTML = "❌ Scraper error"
+}
+
+// RESET UI
+setTimeout(()=>{
+btn.disabled = false
+btn.innerText = "Grab More Users"
+status.innerHTML = "Scraper idle"
+status.classList.remove("running")
+},3000)
+
+}
+// LIVE FILTER
+["search","minFollowers","maxFollowers"].forEach(id=>{
+document.getElementById(id).addEventListener("input", debounce(applyFilters, 300))
+})
+
+// DEBOUNCE
+function debounce(func, delay){
+let timeout
+return (...args)=>{
+clearTimeout(timeout)
+timeout = setTimeout(()=>func.apply(this,args), delay)
+}
+}
+
+// INIT
+renderRegionButtons()
+fetchUsers()
+
+</script>
+
+</body>
+</html>
