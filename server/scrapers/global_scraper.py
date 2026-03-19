@@ -11,13 +11,8 @@ import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os
+from flask import send_file
 
-# ---------------- FIREBASE ----------------
-
-cred = credentials.Certificate("service.json")
-firebase_admin.initialize_app(cred)
-
-db = firestore.client()
 # ---------------- CONFIG ----------------
 
 
@@ -25,95 +20,12 @@ TIKTOK_COOKIE = "sessionid=b707553e5b1a67c5ed797fb74cdf1aa4"
 TIKAPI_KEY = "LxcVXRgh5Asr59aQvc2GNHRbz4gTUh1IFLHZHuBjIqRMO8RK"
 ACCOUNT_KEY = "yrpU9zKnAbOJ3jrYvH8WFQE5pBhDHHYJz8afEenzNp5WGJie"
 
+cred = credentials.Certificate("service.json")
+firebase_admin.initialize_app(cred)
 
+db = firestore.client()
 
-
-def get_usernames_from_excel(file_path, column_name):
-    """
-    Reads usernames from a specified column in an Excel file
-    and returns them as a Python list.
-    """
-    df = pd.read_excel(file_path)
-
-    if column_name not in df.columns:
-        raise ValueError(f"Column '{column_name}' not found in Excel file.")
-
-    usernames = df[column_name].dropna().astype(str).tolist()
-
-    return usernames
-
-
-
-def save_user_to_firestore(profile):
-
-    if not profile:
-        return
-
-    try:
-
-        username = profile["username"]
-
-        doc_ref = db.collection("users").document(username)
-
-        doc_ref.set({
-            "username": profile.get("username"),
-            "nickname": profile.get("nickname"),
-            "region": profile.get("region"),
-            "language": profile.get("language"),
-            "about": profile.get("about"),
-            "avatar": profile.get("avatar"),
-            "followers": int(profile["stats"]["followers"].replace(",", "")),
-            "following": int(profile["stats"]["following"].replace(",", "")),
-            "hearts": int(profile["stats"]["hearts"].replace(",", "")),
-            "videos": int(profile["stats"]["videos"].replace(",", "")),
-            "scraped_at": datetime.datetime.utcnow()
-        })
-
-        print(f"Saved @{username} → Firebase")
-
-    except Exception as e:
-        print("Firebase save error:", e)
-
-
-
-
-
-
-
-
-
-
-
-TARGET_COUNT = 100
-
-api = TikAPI(TIKAPI_KEY)
-User = api.user(accountKey=ACCOUNT_KEY)
-
-
-def load_usernames_from_firestore():
-    try:
-        docs = db.collection("users").stream()
-
-        usernames = []
-
-        for doc in docs:
-            data = doc.to_dict()
-
-            username = data.get("username")
-
-            if username:
-                usernames.append(str(username).strip())
-
-        # remove duplicates
-        usernames = list(set(usernames))
-
-        return usernames
-
-    except Exception as e:
-        print("Error loading usernames from Firestore:", e)
-        return []
-    
-CSV_FILE = "scrapers/users4.csv"
+CSV_FILE = "server/scrapers/users4.csv"
 def load_usernames_from_csv(file_path):
     try:
         usernames = []
@@ -137,165 +49,163 @@ def load_usernames_from_csv(file_path):
         return []
     
 
-INITIAL_NAMES  = load_usernames_from_csv("scrapers/users4.csv")
-def append_to_csv(username):
-    file_exists = os.path.isfile(CSV_FILE)
+INITIAL_NAMES  = load_usernames_from_csv("server/scrapers/users4.csv")
 
-    with open(CSV_FILE, mode="a", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
 
-        # write header only if file doesn't exist
-        if not file_exists:
-            writer.writerow(["username"])
 
-        writer.writerow([
-            username
-        ])
+
+TARGET_COUNT = 100
+
+api = TikAPI(TIKAPI_KEY)
+User = api.user(accountKey=ACCOUNT_KEY)
+
+
 
 
 POPULAR_QUERIES = [
 
 # ========================
-# CORE ARAB LIVE SIGNAL (EXPANDED)
+# HARD UK SIGNAL
 # ========================
-"العالم_العربي","الشرق_الأوسط","الخليج","دول_الخليج",
-"تيك_توك_عرب","لايف_عرب","بث_مباشر","بث_لايف",
-"لايف_الآن","لايف_الخليج","مشاهير_العرب",
-"صناع_المحتوى_عرب","تيك_توك_السعودية",
-"تيك_توك_الخليج","مشاهير_الخليج",
-"بث_مباشر_الآن","لايف_سعودي","لايف_كويتي",
-"لايف_إماراتي","لايف_قطري","لايف_بحريني",
-"لايف_عراقي","لايف_مصري",
-"لايف_مغربي","لايف_جزائري",
-"ترند_عربي","ترند_الخليج",
+"uk","uktiktok","uklive","ukcreator",
+"britishtiktok","britishlive",
+"madeinuk","ukfyp","fypuk",
+"englandlive","scotlandlive",
+"waleslive","northernirelandlive",
 
 # ========================
-# SAUDI (MORE LOCAL DEPTH)
+# UK NATIONS
 # ========================
-"السعودية","الرياض","شمال_الرياض","جنوب_الرياض",
-"شرق_الرياض","غرب_الرياض","حي_الملز",
-"حي_النسيم","حي_العليا","حي_النخيل",
-"جدة","حي_السلامة","حي_الصفا",
-"مكة","المدينة","الدمام","الخبر",
-"الظهران","الطائف","نجران","أبها",
-"تبوك","حائل","القصيم","بريدة",
-"ينبع","حفر_الباطن","جيزان","عسير",
-"الجبيل","عرعر","القريات","الخرج",
+"england","scotland","wales","northernireland",
 
 # ========================
-# UAE (MORE AREAS)
+# ENGLISH REGIONS
 # ========================
-"الإمارات","دبي","دبي_مارينا","جميرا",
-"البرشاء","الخليج_التجاري","ديرة",
-"القصيص","السطوة","المرقبات",
-"أبوظبي","مدينة_محمد_بن_زايد",
-"الشارقة","عجمان","رأس_الخيمة",
-"الفجيرة","العين",
+"greaterlondon","westmidlands","eastmidlands",
+"northwestengland","northeastengland",
+"southwestengland","southeastengland",
+"eastofengland","yorkshire","themidlands",
 
 # ========================
-# EGYPT (MORE DEPTH)
+# UK COUNTIES (EXPANDED)
 # ========================
-"مصر","القاهرة","مدينة_نصر",
-"المعادي","الجيزة","6_اكتوبر",
-"الإسكندرية","طنطا","المنصورة",
-"أسيوط","الزقازيق","شرم_الشيخ",
-"الغردقة","سوهاج","الأقصر",
+"kent","essex","surrey","sussex",
+"lancashire","derbyshire","nottinghamshire",
+"staffordshire","warwickshire","devon",
+"cornwall","cumbria","hampshire",
+"leicestershire","lincolnshire",
+"buckinghamshire","bedfordshire",
+"hertfordshire","gloucestershire",
+"oxfordshire","northamptonshire",
+"worcestershire","cheshire","norfolk",
+"suffolk","somerset","wiltshire",
 
 # ========================
-# MOROCCO (MORE)
+# MAJOR UK CITIES
 # ========================
-"المغرب","الدار_البيضاء","الرباط",
-"مراكش","طنجة","أكادير","فاس",
-"مكناس","وجدة",
+"london","londonuk","londonlive",
+"manchester","manc","manchesterlive",
+"birmingham","brum",
+"glasgow","glasgowlive",
+"edinburgh","edinburghlive",
+"liverpool","liverpoollive",
+"leeds","newcastle","cardiff",
+"belfast","brighton","sheffield",
+"nottingham","leicester","coventry",
+"derby","southampton","oxford",
+"cambridge","hull","portsmouth",
+"plymouth","reading","luton",
+"miltonkeynes","bradford","stokeontrent",
+"sunderland","wolverhampton","aberdeen",
+"dundee","swansea","newport",
 
 # ========================
-# ALGERIA (MORE)
+# FOOTBALL (HIGHEST TRAFFIC)
 # ========================
-"الجزائر","الجزائر_العاصمة",
-"وهران","قسنطينة","عنابة",
+"premierleague","epl","facup",
+"carabaocup","championship",
+"leagueone","leaguetwo",
+"manutd","mancity","arsenal",
+"chelsea","liverpoolfc","tottenham",
+"newcastlefc","westham","astonvilla",
+"everton","wolves","leedsunited",
+"burnley","sheffieldunited",
+"celticfc","rangersfc",
+"englandfc","three_lions",
+"matchday","footballbanter",
 
 # ========================
-# TUNISIA (MORE)
+# UK SPORTS (BEYOND FOOTBALL)
 # ========================
-"تونس","تونس_العاصمة","صفاقس",
-"سوسة","بنزرت",
+"wimbledon","sixnations",
+"englandrugby","scotlandrugby",
+"boxinguk","tysonfury",
+"anthonyjoshua","dartsuk",
+"premiershiprugby","countycricket",
+"ashes","cheltenhamfestival",
+"f1uk","silverstone",
 
 # ========================
-# LIBYA
+# UK MUSIC / DRILL / GRIME
 # ========================
-"ليبيا","طرابلس","بنغازي",
-"مصراتة",
+"ukrap","ukdrill","grime",
+"londonrap","manchesterrap",
+"ukfreestyle","ukartist",
+"centralcee","stormzy",
+"daveuk","skepta",
+"headieone","arrdee",
+"wirelessfestival","glastonbury",
+"readingfestival","britawards",
+"bbc1xtra",
 
 # ========================
-# SUDAN
+# UK UNIVERSITIES (STRONG LIVE)
 # ========================
-"السودان","الخرطوم","أم_درمان",
+"oxforduni","cambridgeuni",
+"ucl","kingscollege",
+"manchesteruni","leedsuni",
+"birminghamuni","edinburghuni",
+"glasgowuni","bristoluni",
+"nottinghamuni","sheffielduni",
+"durhamuni","warwickuni",
+"exeteruni","loughboroughuni",
+"cardiffuni","newcastleuni",
 
 # ========================
-# FOOTBALL (MORE CLUBS)
+# UK LIFESTYLE
 # ========================
-"الهلال","النصر","الأهلي",
-"الاتحاد","الشباب","الزمالك",
-"الأهلي_المصري","الترجي",
-"الوداد","الرجاء","مولودية",
-"الدوري_السعودي","دوري_روشن",
-"الدوري_المصري","الدوري_المغربي",
-"كأس_آسيا","كأس_العالم",
-"منتخب_السعودية","منتخب_مصر",
-"منتخب_المغرب","منتخب_الجزائر",
+"ukgym","britishgym","ukfitness",
+"gymtokuk","ukfashion",
+"londonfashion","ukstreetwear",
+"ukcars","carmeetuk",
+"londoncars","modifieduk",
+"bmwuk","audiuk",
+"fordfocusst","fiestast",
+"fishandchips","nandos",
+"greggs","pubculture",
+"ukfood","uknightlife",
 
 # ========================
-# BEAUTY / WOMEN LIVE (HIGH GIFTS)
+# UK EVENTS / SEASONAL
 # ========================
-"مكياج","صالون","خبيرة_تجميل",
-"بشرة","عناية_بالبشرة",
-"عبايات","فساتين","عطور",
-"محجبات","ستايل","فاشن",
-"تسريحات","صبغات",
+"halloweenuk","bonfirenight",
+"guyfawkes","christmasuk",
+"boxingday","summeruk",
+"bankholiday","ukfestival",
+"creamfields","downloadfestival",
+"leedsfestival","wirelessfest",
 
 # ========================
-# BUSINESS / MONEY
+# UK GAMING (LIVE GOLDMINE)
 # ========================
-"تجارة","مشروع","بيزنس",
-"دروبشيبينغ","استثمار",
-"تداول","فوركس","كريبتو",
-"عمل_اونلاين","ربح_من_الانترنت",
-
-# ========================
-# RAMADAN / ISLAMIC
-# ========================
-"رمضان","رمضان_لايف","افطار",
-"سحور","تراويح","العيد",
-"عيد_الفطر","عيد_الأضحى",
-"قيام_الليل","ختمة","دعاء",
-"خيمة_رمضانية",
-
-# ========================
-# WEDDINGS / SOCIAL
-# ========================
-"زواج","عرس","خطوبة",
-"حفلة","قاعة_افراح",
-"DJ","فرقة_شعبية",
-
-# ========================
-# CARS (VERY STRONG IN GULF)
-# ========================
-"سيارات_فخمة","سوبركار",
-"جي_واجن","لامبورغيني",
-"فيراري","درفت","تفحيط",
-"مواتر","تزويد",
-
-# ========================
-# GAMING (MORE VARIATIONS)
-# ========================
-"لايف_قيمنق","قيمرز",
-"ببجي","فري_فاير",
-"كود","فيفا","قراند",
-"بلايستيشن","اكس_بوكس",
-"فورتنايت","فالورانت",
-"بث_قيمنق","تحدي_قيمنق",
-
+"gaminguk","ukstreamer",
+"fortniteuk","warzoneuk",
+"valorantuk","fifauk",
+"gtaonlineuk","coduk",
+"playstationuk","xboxuk",
+"fc24uk","ukgamers"
 ]
+
 api = TikAPI(TIKAPI_KEY)
 User = api.user(accountKey=ACCOUNT_KEY)
 
@@ -322,7 +232,6 @@ def fetch_tiktok_profile(username):
         return extract_user_data(response.text)
     except Exception as e:
         return None
-
 usernames = set()
 recent_queries = []
 
@@ -438,16 +347,29 @@ def get_query():
     else:
         return random.choice(POPULAR_QUERIES)
 
+def append_to_csv(username):
+    file_exists = os.path.isfile(CSV_FILE)
+
+    with open(CSV_FILE, mode="a", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+
+        # write header only if file doesn't exist
+        if not file_exists:
+            writer.writerow(["username"])
+
+        writer.writerow([
+            username
+        ])
+
 print(f"\nStarting collection. Target: {TARGET_COUNT} unique live users\n")
 cursor = 0
 has_more = True
 rate_limited = False
-rate = 0
+index = 0
 while len(usernames) < TARGET_COUNT:
     try:
-            query = POPULAR_QUERIES[rate]
-            rate = (rate + 1) % len(POPULAR_QUERIES)
-
+            query = POPULAR_QUERIES[index]
+            index =  (index + 1) % len(POPULAR_QUERIES)
 
             print(f"\nSearching with query: {query}")
 
@@ -477,17 +399,12 @@ while len(usernames) < TARGET_COUNT:
                         except Exception as e:
                             print(f"\n[-] Error: {e}\n")
 
-                        ## and username not in INITIAL_NAMES  and int(data.get("stats").get("followers").replace(",", "")) >= 1000 
-                        if username not in usernames and username not in INITIAL_NAMES  and (  data.get('region').upper() in ["SA", "AE", "QA", "KW", "OM", "BH",
-                        "IR", "IQ", "JO", "LB", "SY",
-                        "IL", "PS", "YE", "TR"]   ):
+                        if username not in usernames and username not in INITIAL_NAMES  and ( data.get('region').upper() == "GB" or data.get('region').upper() == "GB"   ):
                             usernames.add(username)
                             profile = fetch_tiktok_profile(username)
-
-                 
-                            append_to_csv(username)
-
                             doc_id = username  # matches your DB structure
+
+                            append_to_csv(username)
 
                             # 🔥 MERGE FULL PROFILE + EXTRA FIELDS
                             db.collection("users").document(doc_id).set({
@@ -527,16 +444,11 @@ while len(usernames) < TARGET_COUNT:
             for username in usernames:
                 writer.writerow([username])
 
+    
+
         print(f"\n✅ Saved {len(usernames)} usernames to {filename}")
 
     # ---------------- SAVE ----------------
-
-
-
-print(f"\n✅ Saved {len(usernames)} usernames to {filename}")
-
-
-
 
 filename = "users.csv"
 

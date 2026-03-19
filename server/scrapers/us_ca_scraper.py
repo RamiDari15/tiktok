@@ -54,7 +54,7 @@ def load_usernames_from_firestore():
         return []
     
 
-CSV_FILE = "scrapers/users4.csv"
+CSV_FILE = "server/scrapers/users4.csv"
 def load_usernames_from_csv(file_path):
     try:
         usernames = []
@@ -78,13 +78,13 @@ def load_usernames_from_csv(file_path):
         return []
     
 
-INITIAL_NAMES  = load_usernames_from_csv("scrapers/users4.csv")
+INITIAL_NAMES  = load_usernames_from_csv("server/scrapers/users4.csv")
 
 
 
 
 
-TARGET_COUNT = 5
+TARGET_COUNT = 100
 
 api = TikAPI(TIKAPI_KEY)
 User = api.user(accountKey=ACCOUNT_KEY)

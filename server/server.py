@@ -11,9 +11,9 @@ CORS(app)
 # SCRIPT PATHS
 # ---------------------------
 SCRIPTS = {
-    "arab": "scrapers/arab_scraper.py",
-    "us": "scrapers/us_ca_scraper.py",
-    "global": "scrapers/global_scraper.py"
+    "arab": "server/scrapers/arab_scraper.py",
+    "us": "server/scrapers/us_ca_scraper.py",
+    "global": "server/scrapers/global_scraper.py"
 }
 
 # ---------------------------
