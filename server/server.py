@@ -19,7 +19,7 @@ SCRIPTS = {
 # ---------------------------
 # SHARED OUTPUT FILE
 # ---------------------------
-CSV_FILE = "users1.csv"
+CSV_FILE = "server/scrapers/users1.csv"
 
 # ---------------------------
 # RUN SCRAPER (WITH LOGS)
