@@ -12,6 +12,8 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import os
 from flask import send_file
+from google.api_core.exceptions import DeadlineExceeded
+
 
 # ---------------- CONFIG ----------------
 
@@ -25,6 +27,26 @@ firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
+def clear_new_batch_collection(batch_size=500):
+    print("🧹 Clearing new_batch collection...")
+
+    collection_ref = db.collection("new_batch")
+
+    while True:
+        docs = collection_ref.limit(batch_size).stream()
+        docs = list(docs)
+
+        if not docs:
+            break
+
+        batch = db.batch()
+
+        for doc in docs:
+            batch.delete(doc.reference)
+
+        batch.commit()
+
+    print("✅ new_batch cleared.")
 CSV_FILE = "server/scrapers/users4.csv"
 def load_usernames_from_csv(file_path):
     try:
@@ -48,11 +70,6 @@ def load_usernames_from_csv(file_path):
         print("Error loading usernames from CSV:", e)
         return []
     
-
-INITIAL_NAMES  = load_usernames_from_csv("server/scrapers/users4.csv")
-
-
-
 
 TARGET_COUNT = 100
 
@@ -208,6 +225,7 @@ POPULAR_QUERIES = [
 
 api = TikAPI(TIKAPI_KEY)
 User = api.user(accountKey=ACCOUNT_KEY)
+clear_new_batch_collection()
 
 # ---------------- HELPERS ----------------
 def extract_username_from_input(input_str):
@@ -399,21 +417,34 @@ while len(usernames) < TARGET_COUNT:
                         except Exception as e:
                             print(f"\n[-] Error: {e}\n")
 
-                        if username not in usernames and username not in INITIAL_NAMES  and ( data.get('region').upper() == "GB" or data.get('region').upper() == "GB"   ):
-                            usernames.add(username)
-                            profile = fetch_tiktok_profile(username)
-                            doc_id = username  # matches your DB structure
+                        if username not in usernames  and ( data.get('region').upper() == "GB" or data.get('region').upper() == "GB"   ):
+                            profile = data
+                            try:
+                                db.collection("users").document(username).create({
+                                    **profile,
+                                    "initial_name": True,
+                                    "source": "live_scraper",
+                                    "added_at": datetime.datetime.now(datetime.UTC)
+                                }, timeout=5)  # 🔥 IMPORTANT
 
-                            append_to_csv(username)
+                                usernames.add(username)
 
-                            # 🔥 MERGE FULL PROFILE + EXTRA FIELDS
-                            db.collection("users").document(doc_id).set({
-                                **profile,  # 👈 ALL USER DATA (followers, bio, avatar, etc.)
-                                "initial_name": True,
-                                "source": "live_scraper",
-                                "added_at": datetime.datetime.now(datetime.UTC)
-                            }, merge=True)
-                            print(f"Collected: {len(usernames)} → @{username}")
+                                db.collection("new_batch").document(username).set({
+                                    "username": username,
+                                    "added_at": firestore.SERVER_TIMESTAMP
+                                })
+
+                                append_to_csv(username)
+
+                                print(f"✅ NEW USER: @{username}")
+
+                            except DeadlineExceeded:
+                                print("⏱️ Firestore timeout — skipping")
+                                continue
+
+                            except Exception as e:
+                                print("❌ Firestore error:", e)
+                                continue
 
                         if len(usernames) >= TARGET_COUNT:
                             break
@@ -430,6 +461,7 @@ while len(usernames) < TARGET_COUNT:
                     print("Rate limited. Stopping loop.")
                     break   # exits the while loop cleanly
                 time.sleep(.1)
+
 
     except KeyboardInterrupt:
         print("\nStopped manually.")

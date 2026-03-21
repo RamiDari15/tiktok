@@ -11,6 +11,7 @@ import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
 import os
+from google.api_core.exceptions import DeadlineExceeded
 
 # ---------------- FIREBASE ----------------
 
@@ -28,20 +29,26 @@ ACCOUNT_KEY = "yrpU9zKnAbOJ3jrYvH8WFQE5pBhDHHYJz8afEenzNp5WGJie"
 
 
 
-def get_usernames_from_excel(file_path, column_name):
-    """
-    Reads usernames from a specified column in an Excel file
-    and returns them as a Python list.
-    """
-    df = pd.read_excel(file_path)
+def clear_new_batch_collection(batch_size=500):
+    print("🧹 Clearing new_batch collection...")
 
-    if column_name not in df.columns:
-        raise ValueError(f"Column '{column_name}' not found in Excel file.")
+    collection_ref = db.collection("new_batch")
 
-    usernames = df[column_name].dropna().astype(str).tolist()
+    while True:
+        docs = collection_ref.limit(batch_size).stream()
+        docs = list(docs)
 
-    return usernames
+        if not docs:
+            break
 
+        batch = db.batch()
+
+        for doc in docs:
+            batch.delete(doc.reference)
+
+        batch.commit()
+
+    print("✅ new_batch cleared.")
 
 
 def save_user_to_firestore(profile):
@@ -73,14 +80,6 @@ def save_user_to_firestore(profile):
 
     except Exception as e:
         print("Firebase save error:", e)
-
-
-
-
-
-
-
-
 
 
 
@@ -152,6 +151,26 @@ def append_to_csv(username):
             username
         ])
 
+def clear_new_batch_collection(batch_size=500):
+    print("🧹 Clearing new_batch collection...")
+
+    collection_ref = db.collection("new_batch")
+
+    while True:
+        docs = collection_ref.limit(batch_size).stream()
+        docs = list(docs)
+
+        if not docs:
+            break
+
+        batch = db.batch()
+
+        for doc in docs:
+            batch.delete(doc.reference)
+
+        batch.commit()
+
+    print("✅ new_batch cleared.")
 
 POPULAR_QUERIES = [
 
@@ -325,6 +344,7 @@ def fetch_tiktok_profile(username):
 
 usernames = set()
 recent_queries = []
+clear_new_batch_collection()
 
 def fetch_with_retry(url, base_headers, max_retries=3, use_cookie=False):
     for attempt in range(max_retries):
@@ -478,25 +498,36 @@ while len(usernames) < TARGET_COUNT:
                             print(f"\n[-] Error: {e}\n")
 
                         ## and username not in INITIAL_NAMES  and int(data.get("stats").get("followers").replace(",", "")) >= 1000 
-                        if username not in usernames and username not in INITIAL_NAMES  and (  data.get('region').upper() in ["SA", "AE", "QA", "KW", "OM", "BH",
+                        if username not in usernames  and (  data.get('region').upper() in ["SA", "AE", "QA", "KW", "OM", "BH",
                         "IR", "IQ", "JO", "LB", "SY",
                         "IL", "PS", "YE", "TR"]   ):
-                            usernames.add(username)
-                            profile = fetch_tiktok_profile(username)
+                            profile = data
+                            try:
+                                db.collection("users").document(username).create({
+                                    **profile,
+                                    "initial_name": True,
+                                    "source": "live_scraper",
+                                    "added_at": datetime.datetime.now(datetime.UTC)
+                                }, timeout=5)  # 🔥 IMPORTANT
 
-                 
-                            append_to_csv(username)
+                                usernames.add(username)
 
-                            doc_id = username  # matches your DB structure
+                                db.collection("new_batch").document(username).set({
+                                    "username": username,
+                                    "added_at": firestore.SERVER_TIMESTAMP
+                                })
 
-                            # 🔥 MERGE FULL PROFILE + EXTRA FIELDS
-                            db.collection("users").document(doc_id).set({
-                                **profile,  # 👈 ALL USER DATA (followers, bio, avatar, etc.)
-                                "initial_name": True,
-                                "source": "live_scraper",
-                                "added_at": datetime.datetime.now(datetime.UTC)
-                            }, merge=True)
-                            print(f"Collected: {len(usernames)} → @{username}")
+                                append_to_csv(username)
+
+                                print(f"✅ NEW USER: @{username}")
+
+                            except DeadlineExceeded:
+                                print("⏱️ Firestore timeout — skipping")
+                                continue
+
+                            except Exception as e:
+                                print("❌ Firestore error:", e)
+                                continue
 
                         if len(usernames) >= TARGET_COUNT:
                             break

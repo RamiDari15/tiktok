@@ -3,9 +3,18 @@ from flask_cors import CORS
 import subprocess
 import threading
 import os
+import csv
+import tempfile
+from firebase_admin import credentials, firestore, initialize_app
 
 app = Flask(__name__)
 CORS(app)
+
+
+cred = credentials.Certificate("service.json")
+initialize_app(cred)
+
+db = firestore.client()
 
 # ---------------------------
 # SCRIPT PATHS
@@ -16,10 +25,7 @@ SCRIPTS = {
     "global": "server/scrapers/global_scraper.py"
 }
 
-# ---------------------------
-# SHARED OUTPUT FILE
-# ---------------------------
-CSV_FILE = "users1.csv"
+
 
 # ---------------------------
 # RUN SCRAPER (WITH LOGS)
@@ -75,20 +81,45 @@ def collect():
     })
 
 
-# ---------------------------
-# DOWNLOAD CSV (ALL SCRIPTS)
-# ---------------------------
 @app.route("/download", methods=["GET"])
 def download():
 
-    if not os.path.exists(CSV_FILE):
-        return jsonify({"error": "file not ready"}), 404
+    try:
+        print("📥 Fetching new_batch from Firestore...")
 
-    return send_file(
-        CSV_FILE,
-        as_attachment=True,
-        download_name="users.csv"
-    )
+        docs = db.collection("new_batch").stream()
+
+        data = []
+        for doc in docs:
+            d = doc.to_dict()
+            data.append({
+                "username": d.get("username", doc.id),
+                "added_at": str(d.get("added_at", ""))
+            })
+
+        if not data:
+            return jsonify({"error": "no data in new_batch"}), 404
+
+        # 🔥 Create temp CSV
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+        csv_path = temp_file.name
+
+        with open(csv_path, mode="w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=["username", "added_at"])
+            writer.writeheader()
+            writer.writerows(data)
+
+        print(f"✅ CSV generated: {csv_path}")
+
+        return send_file(
+            csv_path,
+            as_attachment=True,
+            download_name="new_batch.csv"
+        )
+
+    except Exception as e:
+        print("❌ Download error:", e)
+        return jsonify({"error": str(e)}), 500
 
 
 # ---------------------------
