@@ -13,7 +13,7 @@ from firebase_admin import credentials, firestore
 import os
 from flask import send_file
 from google.api_core.exceptions import DeadlineExceeded
-
+import json
 
 # ---------------- CONFIG ----------------
 

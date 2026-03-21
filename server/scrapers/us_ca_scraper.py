@@ -12,7 +12,7 @@ from firebase_admin import credentials, firestore
 import pandas as pd
 import os
 from google.api_core.exceptions import DeadlineExceeded
-
+import json
 # ---------------- CONFIG ----------------
 
 

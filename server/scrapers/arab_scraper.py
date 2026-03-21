@@ -12,6 +12,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import os
 from google.api_core.exceptions import DeadlineExceeded
+import json
 
 # ---------------- FIREBASE ----------------
 
