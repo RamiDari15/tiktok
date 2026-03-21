@@ -5,6 +5,7 @@ import threading
 import os
 import csv
 import tempfile
+import firebase_admin
 from firebase_admin import credentials, firestore, initialize_app
 import json
 app = Flask(__name__)
