@@ -15,7 +15,9 @@ from google.api_core.exceptions import DeadlineExceeded
 
 # ---------------- FIREBASE ----------------
 
-cred = credentials.Certificate("service.json")
+firebase_key = json.loads(os.environ["FIREBASE_KEY"])
+
+cred = credentials.Certificate(firebase_key)
 firebase_admin.initialize_app(cred)
 
 db = firestore.client()

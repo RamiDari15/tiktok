@@ -21,12 +21,9 @@ TIKAPI_KEY = "LxcVXRgh5Asr59aQvc2GNHRbz4gTUh1IFLHZHuBjIqRMO8RK"
 ACCOUNT_KEY = "yrpU9zKnAbOJ3jrYvH8WFQE5pBhDHHYJz8afEenzNp5WGJie"
 
 
+firebase_key = json.loads(os.environ["FIREBASE_KEY"])
 
-
-
-
-
-cred = credentials.Certificate("service.json")
+cred = credentials.Certificate(firebase_key)
 firebase_admin.initialize_app(cred)
 
 db = firestore.client()
