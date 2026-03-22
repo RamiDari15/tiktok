@@ -435,19 +435,33 @@ applyFilters()
 
 async function waitForCompletion(){
 
+    const statusEl = document.getElementById("scraperStatus");
+
     const interval = setInterval(async () => {
 
-        const res = await fetch(`${API_BASE}/status`);
-        const data = await res.json();
+        try{
+            const res = await fetch(`${API_BASE}/status`);
+            const data = await res.json();
 
-        console.log("Status:", data);
+            console.log("Status:", data);
 
-        if(data.finished){
-            clearInterval(interval);
+            if(data.running){
+                statusEl.innerHTML = "🔄 Scraper in progress...";
+                statusEl.classList.add("running");
+            }
 
-            console.log("✅ Done — downloading CSV");
+            if(data.finished){
+                clearInterval(interval);
 
-            window.location.href = `${API_BASE}/download`;
+                statusEl.innerHTML = "✅ Scraper complete — downloading...";
+                statusEl.classList.remove("running");
+
+                window.location.href = `${API_BASE}/download`;
+            }
+
+        }catch(err){
+            console.error("Status error:", err);
+            statusEl.innerHTML = "⚠️ Status check failed";
         }
 
     }, 2000);
@@ -480,7 +494,7 @@ const script = document.getElementById("collectorType").value
 
 btn.disabled = true
 btn.innerText = "Running..."
-status.innerHTML = "🟢 Running..."
+status.innerHTML = "🔄 Starting scraper...";
 status.classList.add("running")
 
 try{
@@ -505,13 +519,7 @@ console.error(e)
 status.innerHTML = "❌ Scraper error"
 }
 
-// RESET UI
-setTimeout(()=>{
-btn.disabled = false
-btn.innerText = "Grab More Users"
-status.innerHTML = "Scraper idle"
-status.classList.remove("running")
-},3000)
+
 
 }
 // LIVE FILTER
