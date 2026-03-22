@@ -19,6 +19,11 @@ firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
+SCRAPER_STATUS = {
+    "running": False,
+    "finished": False
+}
+
 # ---------------------------
 # SCRIPT PATHS
 # ---------------------------
@@ -34,6 +39,11 @@ SCRIPTS = {
 # RUN SCRAPER (WITH LOGS)
 # ---------------------------
 def run_scraper(script_path):
+
+    global SCRAPER_STATUS
+
+    SCRAPER_STATUS["running"] = True
+    SCRAPER_STATUS["finished"] = False
 
     print(f"🚀 Starting scraper: {script_path}")
 
@@ -55,7 +65,9 @@ def run_scraper(script_path):
     except Exception as e:
         print(f"❌ ERROR running scraper: {e}")
 
-
+    finally:
+        SCRAPER_STATUS["running"] = False
+        SCRAPER_STATUS["finished"] = True
 # ---------------------------
 # START SCRAPER
 # ---------------------------
@@ -64,7 +76,7 @@ def collect():
 
     data = request.json
     script = data.get("script")
-
+    print("scipt")
     if script not in SCRIPTS:
         return jsonify({"error": "invalid script"}), 400
 
@@ -132,7 +144,9 @@ def download():
 def home():
     return "✅ Scraper API Running"
 
-
+@app.route("/status", methods=["GET"])
+def status():
+    return jsonify(SCRAPER_STATUS)
 # ---------------------------
 # RUN SERVER
 # ---------------------------
